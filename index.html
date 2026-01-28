@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hal單字條測驗</title>
+    <title>Hal單字測驗</title>
     <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
     <style>
         /* -------------------
@@ -16,6 +16,7 @@
             --accent-blue: #a0c4ff;
             --accent-green: #9bf6ff;
             --accent-yellow: #fdffb6;
+            --accent-orange: #ffd6a5;
             --border-thickness: 3px;
         }
 
@@ -44,8 +45,21 @@
             border: 2px dashed #ccc; z-index: 1;
         }
 
-        h1 { color: var(--ink-color); margin-bottom: 15px; font-size: 2.2rem; text-shadow: 2px 2px 0 #eee; }
+        h1 { color: var(--ink-color); margin-bottom: 5px; font-size: 2.2rem; text-shadow: 2px 2px 0 #eee; }
         
+        /* 新增計分板樣式 */
+        .score-board {
+            background-color: var(--accent-orange);
+            display: inline-block;
+            padding: 5px 20px;
+            border-radius: 20px;
+            border: 2px dashed var(--ink-color);
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            transform: rotate(1deg);
+        }
+
         .btn {
             font-family: 'Patrick Hand', cursive; background-color: var(--accent-green);
             color: var(--ink-color); border: var(--border-thickness) solid var(--ink-color);
@@ -91,7 +105,7 @@
         .answer-box { 
             background-color: #f0f0f0; color: #888; padding: 10px 15px; 
             border-radius: 12px; cursor: pointer; border: 3px dashed #ccc; font-size: 1.2rem; flex: 1;
-            transition: all 0.3s; transform: rotate(-2deg);
+            transition: all 0.3s; transform: rotate(-2deg); position: relative;
         }
         .answer-box:nth-child(2) { transform: rotate(2deg); }
         .answer-box:hover { transform: scale(1.05) rotate(0deg); background-color: #e9e9e9; }
@@ -101,6 +115,15 @@
             border: 3px solid var(--ink-color); font-weight: bold;
             transform: rotate(0deg) scale(1.05); box-shadow: 3px 3px 0 rgba(0,0,0,0.1);
         }
+
+        /* 扣分提示小標籤 */
+        .minus-point {
+            position: absolute; top: -10px; right: -10px;
+            background: #ff6961; color: white; border-radius: 50%;
+            width: 25px; height: 25px; font-size: 0.8rem; line-height: 25px;
+            font-weight: bold; display: none;
+        }
+        .revealed .minus-point { display: block; }
 
         .message { margin-top: 20px; font-weight: bold; min-height: 30px; font-size: 1.3rem; }
         .correct-msg { color: #44a047; text-shadow: 1px 1px 0 #a8e6cf; } 
@@ -112,6 +135,10 @@
 
 <div class="container">
     <h1>🎧 1200單(增加中)</h1>
+    
+    <div class="score-board">
+        💰 總分: <span id="score-val">0</span>
+    </div>
     
     <div class="settings-area">
         <label class="setting-label">🗣️ 選擇發音 (Voice)：</label>
@@ -128,8 +155,12 @@
     <button class="btn btn-audio" onclick="playAudio()">🔊 試聽 / 播放 (Play)</button>
 
     <div class="cards-area">
-        <div id="box-zh" class="answer-box" onclick="toggleZh()">🙈 偷看中文</div>
-        <div id="box-en" class="answer-box" onclick="toggleEn()">🙈 偷看英文</div>
+        <div id="box-zh" class="answer-box" onclick="toggleZh()">
+            🙈 偷看中文 <span class="minus-point">-0.5</span>
+        </div>
+        <div id="box-en" class="answer-box" onclick="toggleEn()">
+            🙈 偷看英文 <span class="minus-point">-0.5</span>
+        </div>
     </div>
     
     <div class="input-group">
@@ -223,7 +254,6 @@
         { en: "successful", zh: "成功的" },
         { en: "unhappy", zh: ["不幸的","不高興的"] },
         { en: "wise", zh: "有智慧的" },
-
     ];
 
     let quizList = []; 
@@ -233,6 +263,13 @@
     let isRevealedZh = false;
     let voices = []; 
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    // --- 計分系統變數 ---
+    let totalScore = 0;
+    let currentRoundScore = 2; // 每題預設 2 分
+    let hasPeekedZhThisRound = false;
+    let hasPeekedEnThisRound = false;
+    let isQuestionDone = false; // 防止重複加分
 
     function playSoundEffect(type) {
         if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -329,10 +366,22 @@
 
     function loadQuestion() {
         if (currentIndex >= quizList.length) {
-            document.querySelector(".container").innerHTML = `<h2>🏆 測驗結束！</h2><p>恭喜完成！</p><button class="btn btn-submit" onclick="location.reload()">🔄 再玩一次</button>`;
+            document.querySelector(".container").innerHTML = `
+                <h2>🏆 測驗結束！</h2>
+                <div class="score-board" style="font-size:2rem; margin:20px 0;">最終得分: ${totalScore}</div>
+                <p>恭喜完成所有題目！</p>
+                <button class="btn btn-submit" onclick="location.reload()">🔄 再玩一次</button>
+            `;
             return;
         }
+        
+        // --- 重置每題狀態 ---
         currentItem = quizList[currentIndex];
+        currentRoundScore = 2; 
+        hasPeekedZhThisRound = false;
+        hasPeekedEnThisRound = false;
+        isQuestionDone = false;
+        
         document.getElementById("current-index").innerText = currentIndex + 1;
         const inputEn = document.getElementById("input-en");
         const inputZh = document.getElementById("input-zh");
@@ -341,31 +390,52 @@
         document.getElementById("message").innerText = "";
         document.getElementById("next-btn").style.display = "none";
         isRevealedEn = false; isRevealedZh = false;
-        resetCard("box-en", "🙈 偷看英文");
-        resetCard("box-zh", "🙈 偷看中文");
+        
+        // 重置卡片顯示 (移除 revealed class)
+        const boxEn = document.getElementById("box-en");
+        const boxZh = document.getElementById("box-zh");
+        boxEn.className = "answer-box"; boxEn.innerHTML = '🙈 偷看英文 <span class="minus-point">-0.5</span>';
+        boxZh.className = "answer-box"; boxZh.innerHTML = '🙈 偷看中文 <span class="minus-point">-0.5</span>';
+        
         inputEn.focus();
     }
 
-    function resetCard(id, text) {
-        const el = document.getElementById(id);
-        el.innerText = text; el.className = "answer-box";
-    }
-
     function toggleZh() {
+        // 如果已經答對結束，就不再執行扣分邏輯，但允許翻看
+        if (!isQuestionDone && !hasPeekedZhThisRound) {
+            currentRoundScore -= 0.5;
+            hasPeekedZhThisRound = true;
+        }
+
         const box = document.getElementById("box-zh");
         if (isRevealedZh) {
-            box.innerText = "🙈 偷看中文"; box.className = "answer-box"; isRevealedZh = false;
+            box.innerHTML = '🙈 偷看中文 <span class="minus-point">-0.5</span>'; 
+            box.className = "answer-box"; 
+            isRevealedZh = false;
         } else {
             const displayZh = Array.isArray(currentItem.zh) ? currentItem.zh.join(" / ") : currentItem.zh;
-            box.innerText = displayZh; 
-            box.className = "answer-box revealed"; isRevealedZh = true;
+            box.innerHTML = displayZh + ' <span class="minus-point">-0.5</span>'; 
+            box.className = "answer-box revealed"; 
+            isRevealedZh = true;
         }
     }
 
     function toggleEn() {
+        if (!isQuestionDone && !hasPeekedEnThisRound) {
+            currentRoundScore -= 0.5;
+            hasPeekedEnThisRound = true;
+        }
+
         const box = document.getElementById("box-en");
-        if (isRevealedEn) { box.innerText = "🙈 偷看英文"; box.className = "answer-box"; isRevealedEn = false; }
-        else { box.innerText = currentItem.en; box.className = "answer-box revealed"; isRevealedEn = true; }
+        if (isRevealedEn) { 
+            box.innerHTML = '🙈 偷看英文 <span class="minus-point">-0.5</span>'; 
+            box.className = "answer-box"; 
+            isRevealedEn = false; 
+        } else { 
+            box.innerHTML = currentItem.en + ' <span class="minus-point">-0.5</span>'; 
+            box.className = "answer-box revealed"; 
+            isRevealedEn = true; 
+        }
     }
 
     function playAudio() {
@@ -373,8 +443,6 @@
             window.speechSynthesis.cancel();
             
             const utterance = new SpeechSynthesisUtterance(currentItem.en);
-            
-            // 抓取語速
             const rate = document.getElementById("rate-range").value;
             utterance.rate = rate;
 
@@ -393,38 +461,42 @@
             window.speechSynthesis.speak(utterance);
         }
     }
-
-    // ===========================================
-    // 💡 關鍵更新：移除括號自動判讀，改為嚴格比對
-    // ===========================================
     
     function checkAnswer() {
+        // 如果已經答對了，就不要再重複執行檢查
+        if (isQuestionDone) return;
+
         const inputEn = document.getElementById("input-en");
         const inputZh = document.getElementById("input-zh");
         const msg = document.getElementById("message");
         
         const valEn = inputEn.value.trim().toLowerCase();
-        const valZh = inputZh.value.trim(); // 直接讀取，不做任何自動轉換
+        const valZh = inputZh.value.trim(); 
 
         if (valEn === "" && valZh === "") { playAudio(); return; }
 
         const isEnCorrect = (valEn === currentItem.en.toLowerCase());
-        
         const validAnswers = Array.isArray(currentItem.zh) ? currentItem.zh : [currentItem.zh];
-        
-        // 嚴格比對：輸入的中文必須和答案一模一樣 (Strict Equality)
         const isZhCorrect = validAnswers.some(target => target === valZh);
 
         inputEn.className = isEnCorrect ? "correct-input" : "wrong-input";
         inputZh.className = isZhCorrect ? "correct-input" : "wrong-input";
 
         if (isEnCorrect && isZhCorrect) {
+            // --- 答對邏輯 ---
+            isQuestionDone = true; // 鎖定狀態
+            totalScore += Math.max(0, currentRoundScore); // 確保分數不為負
+            document.getElementById("score-val").innerText = totalScore; // 更新介面
+
             playSoundEffect('correct');
-            msg.innerHTML = "🎉 雙語全對！<br>Awesome!";
+            msg.innerHTML = `🎉 雙語全對！ (本題得 ${Math.max(0, currentRoundScore)} 分)<br>Awesome!`;
             msg.className = "message correct-msg";
             document.getElementById("next-btn").style.display = "inline-block";
+            
+            // 全對後自動翻開卡片給使用者看 (不會扣分，因為 isQuestionDone = true)
             if(!isRevealedZh) toggleZh();
             if(!isRevealedEn) toggleEn();
+            
         } else if (isEnCorrect && !isZhCorrect) {
             playSoundEffect('wrong');
             msg.innerText = "⚠️ 英文對了，但中文意思要再想想喔！";
